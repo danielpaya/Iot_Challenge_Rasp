@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Calidad del Aire - Sabana Centro</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-titles">
+      <h1>Dashboard de Calidad del Aire</h1>
+      <p>Sistema IoT ESP32 + Raspberry Pi + Supabase</p>
+    </div>
+    <div class="header-controls">
+      <button id="voiceToggle" class="btn-voice">Activar alertas de voz</button>
+      <div id="connectionStatus" class="status-pill">Conectando...</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary">
+      <div id="estadoCard" class="main-card">
+        <span class="label">Estado ambiental</span>
+        <h2 id="estado">--</h2>
+        <p id="causa">Esperando datos...</p>
+      </div>
+
+      <div class="card">
+        <span class="label">PM1.0</span>
+        <strong id="pm1">--</strong>
+        <small>µg/m³</small>
+      </div>
+
+      <div class="card">
+        <span class="label">PM2.5</span>
+        <strong id="pm25">--</strong>
+        <small>µg/m³</small>
+      </div>
+
+      <div class="card">
+        <span class="label">PM10</span>
+        <strong id="pm10">--</strong>
+        <small>µg/m³</small>
+      </div>
+
+      <div class="card">
+        <span class="label">NH3 estimado</span>
+        <strong id="nh3">--</strong>
+        <small>ppm</small>
+      </div>
+
+      <div class="card">
+        <span class="label">Temperatura</span>
+        <strong id="temperature">--</strong>
+        <small>°C</small>
+      </div>
+
+      <div class="card">
+        <span class="label">Humedad</span>
+        <strong id="humidity">--</strong>
+        <small>%</small>
+      </div>
+
+      <div class="card">
+        <span class="label">Presión</span>
+        <strong id="pressure">--</strong>
+        <small>hPa</small>
+      </div>
+    </section>
+
+    <section id="airaSection" class="panel aira-panel">
+      <div class="aira-header">
+        <img id="airaAvatar" class="aira-avatar" src="assets/aira-avatar.png" alt="Avatar de AIRA">
+        <div class="aira-title-group">
+          <h2>AIRA</h2>
+          <p>Asistente Inteligente de Recomendación Ambiental</p>
+        </div>
+        <button id="requestAiraBtn" class="btn-primary">Solicitar recomendación de AIRA</button>
+      </div>
+
+      <div class="aira-content">
+        <p id="airaRecommendation">AIRA aún no ha generado recomendaciones.</p>
+        <div class="aira-meta">
+          <span id="airaTimestamp">Última recomendación: --</span>
+          <span id="airaTrigger">Activación: --</span>
+          <span id="airaAnalyzedState">Estado analizado: --</span>
+          <span id="airaAnalyzedCause">Causa: --</span>
+          <span id="airaModel">Modelo: --</span>
+        </div>
+        <p id="airaRequestStatus" class="aira-request-status">AIRA lista.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Histórico reciente</h2>
+          <p>Últimos registros recibidos desde Supabase</p>
+        </div>
+        <span id="lastUpdate">Última actualización: --</span>
+      </div>
+      <canvas id="pmChart"></canvas>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Últimas lecturas y filtros históricos</h2>
+          <p>Explora los datos almacenados en la nube</p>
+        </div>
+        <div id="filterStatus" class="status-pill filter-indicator" style="display: none;">
+          Filtros activos
+        </div>
+      </div>
+
+      <div class="filters-container">
+        <div class="filter-group">
+          <label for="filterDate">Día específico</label>
+          <input type="date" id="filterDate">
+        </div>
+        
+        <div class="filter-group">
+          <label>Rango de fechas</label>
+          <div class="filter-row">
+            <input type="date" id="filterStartDate" placeholder="Inicio">
+            <span>a</span>
+            <input type="date" id="filterEndDate" placeholder="Fin">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Rango de horas</label>
+          <div class="filter-row">
+            <input type="time" id="filterStartTime" placeholder="Inicio">
+            <span>a</span>
+            <input type="time" id="filterEndTime" placeholder="Fin">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterState">Estado ambiental</label>
+          <select id="filterState">
+            <option value="Todos">Todos</option>
+            <option value="Normal">Normal</option>
+            <option value="Precaucion">Precaución</option>
+            <option value="Peligro">Peligro</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterVariable">Variable en gráfica</label>
+          <select id="filterVariable">
+            <option value="Todos">Todas (PM2.5 y PM10)</option>
+            <option value="pm1">PM1.0</option>
+            <option value="pm25">PM2.5</option>
+            <option value="pm10">PM10</option>
+            <option value="nh3">NH3</option>
+            <option value="temperature">Temperatura</option>
+            <option value="humidity">Humedad</option>
+            <option value="pressure">Presión</option>
+          </select>
+        </div>
+
+        <div class="filter-actions">
+          <button id="btnApplyFilters" class="btn-primary">Aplicar filtros</button>
+          <button id="btnClearFilters" class="btn-secondary">Limpiar filtros</button>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>PM1</th>
+              <th>PM2.5</th>
+              <th>PM10</th>
+              <th>NH3</th>
+              <th>Temp</th>
+              <th>Hum</th>
+              <th>Presión</th>
+              <th>Estado</th>
+              <th>Causa</th>
+            </tr>
+          </thead>
+          <tbody id="readingsTable">
+            <tr>
+              <td colspan="10">Esperando datos...</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="table-footer">
+          <span id="recordCount">Mostrando 0 registros</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Challenge #3 - Internet de las Cosas | Universidad de La Sabana</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

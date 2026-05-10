@@ -1,0 +1,16 @@
+[Unit]
+Description=IoT Gateway ESP32 MQTT to SQLite and Supabase
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/iot-gateway
+ExecStart=/home/admin/iot-gateway/venv/bin/python -u /home/admin/iot-gateway/gateway_local.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
