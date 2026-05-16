@@ -592,3 +592,75 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══ Login Overlay ═══ */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.login-overlay.login-hidden {
+  display: none !important;
+}
+
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.login-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6rem;
+  color: var(--text);
+}
+
+.login-card p {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.login-card input[type="password"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+
+.login-card input[type="password"]:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.login-card .btn-primary {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+
+.login-error {
+  margin: 0.75rem 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: bold;
+  min-height: 1.3em;
+}

@@ -1,7 +1,16 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-const SUPABASE_URL = "https://zbkyvafazeifrpcgmhrp.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpia3l2YWZhemVpZnJwY2dtaHJwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODM1MDI5MiwiZXhwIjoyMDkzOTI2MjkyfQ.DSYSg0-sXZLBcZ3theWSX1KpJWL5UDJpGwPL2KCMF1M";
+// ═══ Configuración pública leída desde config.js (window.APP_CONFIG) ═══
+const APP_CONFIG = window.APP_CONFIG || {};
+
+const SUPABASE_URL = APP_CONFIG.SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = APP_CONFIG.SUPABASE_PUBLISHABLE_KEY;
+const UBIDOTS_PUBLIC_DASHBOARD_URL = APP_CONFIG.UBIDOTS_PUBLIC_DASHBOARD_URL;
+const DASHBOARD_PASSWORD = APP_CONFIG.DASHBOARD_PASSWORD || "AIRA2026";
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.error("Falta configuración: asegúrate de que config.js define window.APP_CONFIG con SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY.");
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
@@ -12,9 +21,6 @@ const FILTER_LIMIT = 200;
 // ═══ Freshness thresholds (seconds) ═══
 const LIVE_THRESHOLD_SECONDS = 10;
 const STALE_THRESHOLD_SECONDS = 30;
-
-// ═══ Ubidots public dashboard URL (NO token, solo URL pública) ═══
-const UBIDOTS_PUBLIC_DASHBOARD_URL = "https://stem.ubidots.com/app/dashboards/public/dashboard/4WvU8etdSJtvegHopkXWHAy-Ik7kullA?navbar=true&contextbar=false&layersBar=false";
 
 const elements = {
   connectionStatus: document.getElementById("connectionStatus"),
@@ -550,12 +556,13 @@ async function fetchHistoricalData() {
       query = query.lte("timestamp_utc", localEnd.toISOString());
     }
 
-    // Filter by State
+    // Filter by State — soporta "Precaucion" y "Precaución" en la DB
     if (elements.filterState.value !== "Todos") {
-      // Supabase EQ requires exact match, but our values might have accents in DB or be slightly different.
-      // Assuming 'Normal', 'Precaución', 'Peligro' mapping.
-      const stateVal = elements.filterState.value === "Precaucion" ? "Precaución" : elements.filterState.value;
-      query = query.eq("estado", stateVal);
+      if (elements.filterState.value === "Precaucion") {
+        query = query.in("estado", ["Precaucion", "Precaución"]);
+      } else {
+        query = query.eq("estado", elements.filterState.value);
+      }
     }
   } else {
     query = query.limit(HISTORY_LIMIT);
@@ -630,7 +637,40 @@ elements.requestAiraBtn.addEventListener("click", requestAiraRecommendation);
 elements.showSupabaseBtn.addEventListener("click", () => showDataSource("supabase"));
 elements.showUbidotsBtn.addEventListener("click", () => showDataSource("ubidots"));
 
+// --- Simple Login ---
+
+/** Login sencillo con contraseña. Usa sessionStorage para persistir en la sesión. */
+function initSimpleLogin() {
+  const overlay = document.getElementById("loginOverlay");
+  const input = document.getElementById("loginPassword");
+  const button = document.getElementById("loginBtn");
+  const error = document.getElementById("loginError");
+
+  // Si ya autenticado en esta sesión, ocultar overlay
+  if (sessionStorage.getItem("aira_dashboard_auth") === "true") {
+    overlay.classList.add("login-hidden");
+    return;
+  }
+
+  function tryLogin() {
+    if (input.value === DASHBOARD_PASSWORD) {
+      sessionStorage.setItem("aira_dashboard_auth", "true");
+      overlay.classList.add("login-hidden");
+      return;
+    }
+    error.textContent = "Contraseña incorrecta.";
+    input.value = "";
+    input.focus();
+  }
+
+  button.addEventListener("click", tryLogin);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") tryLogin();
+  });
+}
+
 // Initial Load
+initSimpleLogin();
 initVoiceAlerts();
 initUbidotsView();
 showDataSource("supabase");
