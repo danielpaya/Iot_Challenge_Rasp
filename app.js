@@ -9,6 +9,13 @@ const POLLING_INTERVAL_MS = 3000;
 const HISTORY_LIMIT = 40;
 const FILTER_LIMIT = 200;
 
+// ═══ Freshness thresholds (seconds) ═══
+const LIVE_THRESHOLD_SECONDS = 10;
+const STALE_THRESHOLD_SECONDS = 30;
+
+// ═══ Ubidots public dashboard URL (NO token, solo URL pública) ═══
+const UBIDOTS_PUBLIC_DASHBOARD_URL = "https://stem.ubidots.com/app/dashboards/public/dashboard/4WvU8etdSJtvegHopkXWHAy-Ik7kullA?navbar=true&contextbar=false&layersBar=false";
+
 const elements = {
   connectionStatus: document.getElementById("connectionStatus"),
   estado: document.getElementById("estado"),
@@ -24,11 +31,11 @@ const elements = {
   lastUpdate: document.getElementById("lastUpdate"),
   readingsTable: document.getElementById("readingsTable"),
   recordCount: document.getElementById("recordCount"),
-  
+
   // Controls
   voiceToggle: document.getElementById("voiceToggle"),
   filterStatus: document.getElementById("filterStatus"),
-  
+
   // AIRA
   airaSection: document.getElementById("airaSection"),
   airaRecommendation: document.getElementById("airaRecommendation"),
@@ -39,7 +46,7 @@ const elements = {
   airaModel: document.getElementById("airaModel"),
   requestAiraBtn: document.getElementById("requestAiraBtn"),
   airaRequestStatus: document.getElementById("airaRequestStatus"),
-  
+
   // Filters
   filterDate: document.getElementById("filterDate"),
   filterStartDate: document.getElementById("filterStartDate"),
@@ -50,6 +57,15 @@ const elements = {
   filterVariable: document.getElementById("filterVariable"),
   btnApplyFilters: document.getElementById("btnApplyFilters"),
   btnClearFilters: document.getElementById("btnClearFilters"),
+
+  // Source toggle & Ubidots view
+  supabaseView: document.getElementById("supabaseView"),
+  ubidotsView: document.getElementById("ubidotsView"),
+  showSupabaseBtn: document.getElementById("showSupabaseBtn"),
+  showUbidotsBtn: document.getElementById("showUbidotsBtn"),
+  ubidotsFrame: document.getElementById("ubidotsFrame"),
+  openUbidotsBtn: document.getElementById("openUbidotsBtn"),
+  ubidotsPlaceholderMessage: document.getElementById("ubidotsPlaceholderMessage"),
 };
 
 let pmChart;
@@ -82,11 +98,145 @@ function getEstadoClass(estado) {
   return "estado-normal";
 }
 
-function setConnectionStatus(text, ok = true) {
+/**
+ * Updates the connection status pill.
+ * @param {string} text  – Label text to display.
+ * @param {"ok"|"warning"|"error"} status – Visual state.
+ */
+function setConnectionStatus(text, status = "ok") {
   elements.connectionStatus.textContent = text;
-  elements.connectionStatus.className = ok
-    ? "status-pill status-ok"
-    : "status-pill status-error";
+  elements.connectionStatus.className = "status-pill";
+  if (status === "ok") elements.connectionStatus.classList.add("status-ok");
+  if (status === "warning") elements.connectionStatus.classList.add("status-warning");
+  if (status === "error") elements.connectionStatus.classList.add("status-error");
+}
+
+// --- Telemetry Freshness ---
+
+/** Formats an age in seconds into a human-readable string. */
+function formatAge(seconds) {
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h`;
+}
+
+/**
+ * Returns a freshness descriptor from the latest reading.
+ * This is independent of active filters.
+ */
+function getDataFreshnessStatus(latest) {
+  if (!latest) {
+    return {
+      status: "offline",
+      label: "Sin datos",
+      detail: "No hay registros disponibles",
+      ok: false,
+    };
+  }
+
+  const timestamp = latest.created_at || latest.timestamp_utc;
+  const lastTime = new Date(timestamp);
+  const ageSeconds = Math.floor((Date.now() - lastTime.getTime()) / 1000);
+
+  if (Number.isNaN(ageSeconds)) {
+    return {
+      status: "unknown",
+      label: "Estado desconocido",
+      detail: "No se pudo leer la hora del último dato",
+      ok: false,
+    };
+  }
+
+  if (ageSeconds <= LIVE_THRESHOLD_SECONDS) {
+    return {
+      status: "live",
+      label: "En vivo",
+      detail: `Último dato hace ${ageSeconds} s`,
+      ok: true,
+    };
+  }
+
+  if (ageSeconds <= STALE_THRESHOLD_SECONDS) {
+    return {
+      status: "stale",
+      label: "Sin actualización reciente",
+      detail: `Último dato hace ${ageSeconds} s`,
+      ok: false,
+    };
+  }
+
+  return {
+    status: "offline",
+    label: "Sistema desconectado",
+    detail: `Último dato hace ${formatAge(ageSeconds)}`,
+    ok: false,
+  };
+}
+
+/**
+ * Queries the most recent global reading (ignoring filters)
+ * and updates the status pill with real freshness information.
+ */
+async function fetchTelemetryFreshness() {
+  try {
+    const { data, error } = await supabase
+      .from("readings")
+      .select("id, created_at, timestamp_utc, estado, pm25")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error("Error verificando frescura de telemetría", error);
+      setConnectionStatus("Error leyendo Supabase", "error");
+      return;
+    }
+
+    const latest = data?.[0];
+    const freshness = getDataFreshnessStatus(latest);
+
+    let visualStatus = "error";
+    if (freshness.status === "live") visualStatus = "ok";
+    if (freshness.status === "stale") visualStatus = "warning";
+
+    setConnectionStatus(`${freshness.label} · ${freshness.detail}`, visualStatus);
+  } catch (err) {
+    console.error("Excepción en fetchTelemetryFreshness", err);
+    setConnectionStatus("Error de conexión", "error");
+  }
+}
+
+// --- Source Toggle (Supabase / Ubidots) ---
+
+/** Switches the visible data source view. */
+function showDataSource(source) {
+  if (source === "supabase") {
+    elements.supabaseView.classList.remove("hidden");
+    elements.ubidotsView.classList.add("hidden");
+    elements.showSupabaseBtn.classList.add("active");
+    elements.showUbidotsBtn.classList.remove("active");
+  }
+  if (source === "ubidots") {
+    elements.supabaseView.classList.add("hidden");
+    elements.ubidotsView.classList.remove("hidden");
+    elements.showSupabaseBtn.classList.remove("active");
+    elements.showUbidotsBtn.classList.add("active");
+  }
+}
+
+/** Initialises the Ubidots iframe/link or shows a placeholder. */
+function initUbidotsView() {
+  if (!UBIDOTS_PUBLIC_DASHBOARD_URL || UBIDOTS_PUBLIC_DASHBOARD_URL.includes("PEGAR_AQUI")) {
+    elements.ubidotsFrame.style.display = "none";
+    elements.openUbidotsBtn.style.display = "none";
+    elements.ubidotsPlaceholderMessage.textContent =
+      "Configura la URL pública del dashboard de Ubidots para visualizar esta sección embebida.";
+    return;
+  }
+
+  elements.ubidotsFrame.src = UBIDOTS_PUBLIC_DASHBOARD_URL;
+  elements.openUbidotsBtn.href = UBIDOTS_PUBLIC_DASHBOARD_URL;
 }
 
 // --- Voice Alert Logic ---
@@ -99,11 +249,11 @@ function initVoiceAlerts() {
 
   elements.voiceToggle.addEventListener("click", () => {
     voiceAlertsEnabled = !voiceAlertsEnabled;
-    
+
     if (voiceAlertsEnabled) {
       elements.voiceToggle.textContent = "Alertas de voz activadas";
       elements.voiceToggle.classList.add("active");
-      
+
       // Test speech on activation
       const msg = new SpeechSynthesisUtterance("Alertas de voz activadas.");
       msg.lang = "es-ES";
@@ -118,15 +268,15 @@ function initVoiceAlerts() {
 
 function handleVoiceAlert(latest) {
   const cleanEstado = String(latest.estado || "").toLowerCase();
-  
+
   if (cleanEstado.includes("peligro")) {
     // Add critical style
     elements.estadoCard.classList.add("estado-peligro-critico");
-    
+
     // Check if we already spoke for this ID
     if (voiceAlertsEnabled && latest.id !== lastSpokenDangerId) {
       lastSpokenDangerId = latest.id;
-      
+
       const msg = new SpeechSynthesisUtterance(
         "Alerta de peligro. Se detectaron niveles críticos de calidad del aire. Revise el dashboard."
       );
@@ -215,10 +365,10 @@ function updateChart(rows) {
       { label: "PM10", data: orderedRows.map(r => r.pm10), tension: 0.3, borderColor: '#f59e0b', backgroundColor: '#f59e0b' }
     ];
   } else {
-    const labelMap = { 
-      pm1: 'PM1.0', pm25: 'PM2.5', pm10: 'PM10', 
-      nh3: 'NH3', temperature: 'Temperatura', 
-      humidity: 'Humedad', pressure: 'Presión' 
+    const labelMap = {
+      pm1: 'PM1.0', pm25: 'PM2.5', pm10: 'PM10',
+      nh3: 'NH3', temperature: 'Temperatura',
+      humidity: 'Humedad', pressure: 'Presión'
     };
     datasets = [
       { label: labelMap[selectedVar], data: orderedRows.map(r => r[selectedVar]), tension: 0.3, borderColor: '#22c55e', backgroundColor: '#22c55e' }
@@ -275,11 +425,11 @@ async function fetchLatestAiraRecommendation() {
     const latest = data[0];
     elements.airaRecommendation.textContent = latest.recommendation || "Sin recomendación.";
     elements.airaTimestamp.textContent = `Última recomendación: ${formatDate(latest.timestamp_utc)}`;
-    
+
     let triggerText = latest.trigger_source;
     if (triggerText === "automatic_peligro") triggerText = "Automática por estado Peligro";
     else if (triggerText === "manual_dashboard") triggerText = "Manual desde dashboard";
-    
+
     elements.airaTrigger.textContent = `Activación: ${triggerText}`;
     elements.airaAnalyzedState.textContent = `Estado analizado: ${latest.estado || "--"}`;
     elements.airaAnalyzedCause.textContent = `Causa: ${latest.causa || "--"}`;
@@ -333,7 +483,7 @@ async function requestAiraRecommendation() {
     });
 
     if (insertError) throw insertError;
-    
+
     console.log("Solicitud AIRA enviada");
 
     // Fetch progressively as processing takes time
@@ -367,12 +517,10 @@ async function pollLatestData() {
 
   if (error) {
     console.error("Error fetching latest:", error);
-    setConnectionStatus("Error leyendo Supabase", false);
+    setConnectionStatus("Error leyendo Supabase", "error");
     return;
   }
 
-  setConnectionStatus("Datos en vivo", true);
-  
   if (data && data.length > 0) {
     const latest = data[0];
     updateCards(latest);
@@ -393,7 +541,7 @@ async function fetchHistoricalData() {
       const localEnd = new Date(elements.filterDate.value + "T23:59:59.999");
       query = query.gte("timestamp_utc", localStart.toISOString());
       query = query.lte("timestamp_utc", localEnd.toISOString());
-    } 
+    }
     // Or filter by date range
     else if (elements.filterStartDate.value && elements.filterEndDate.value) {
       const localStart = new Date(elements.filterStartDate.value + "T00:00:00");
@@ -427,7 +575,7 @@ async function fetchHistoricalData() {
     finalData = finalData.filter(row => {
       const d = new Date(row.timestamp_utc);
       const hhmm = d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
-      
+
       let valid = true;
       if (elements.filterStartTime.value && hhmm < elements.filterStartTime.value) valid = false;
       if (elements.filterEndTime.value && hhmm > elements.filterEndTime.value) valid = false;
@@ -441,9 +589,12 @@ async function fetchHistoricalData() {
 
 // Main polling loop manager
 async function pollingLoop() {
+  // Freshness runs ALWAYS, independent of filters
+  await fetchTelemetryFreshness();
+
   await pollLatestData();
   await fetchLatestAiraRecommendation();
-  
+
   if (!filtersActive) {
     await fetchHistoricalData();
   }
@@ -459,7 +610,7 @@ function applyFilters() {
 function clearFilters() {
   filtersActive = false;
   elements.filterStatus.style.display = "none";
-  
+
   elements.filterDate.value = "";
   elements.filterStartDate.value = "";
   elements.filterEndDate.value = "";
@@ -467,7 +618,7 @@ function clearFilters() {
   elements.filterEndTime.value = "";
   elements.filterState.value = "Todos";
   elements.filterVariable.value = "Todos";
-  
+
   fetchHistoricalData();
 }
 
@@ -475,7 +626,13 @@ elements.btnApplyFilters.addEventListener("click", applyFilters);
 elements.btnClearFilters.addEventListener("click", clearFilters);
 elements.requestAiraBtn.addEventListener("click", requestAiraRecommendation);
 
+// Source toggle listeners
+elements.showSupabaseBtn.addEventListener("click", () => showDataSource("supabase"));
+elements.showUbidotsBtn.addEventListener("click", () => showDataSource("ubidots"));
+
 // Initial Load
 initVoiceAlerts();
+initUbidotsView();
+showDataSource("supabase");
 pollingLoop();
 setInterval(pollingLoop, POLLING_INTERVAL_MS);

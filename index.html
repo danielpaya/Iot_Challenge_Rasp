@@ -11,7 +11,7 @@
   <header>
     <div class="header-titles">
       <h1>Dashboard de Calidad del Aire</h1>
-      <p>Sistema IoT ESP32 + Raspberry Pi + Supabase</p>
+      <p>Sistema IoT ESP32 + Raspberry Pi + Supabase + Ubidots</p>
     </div>
     <div class="header-controls">
       <button id="voiceToggle" class="btn-voice">Activar alertas de voz</button>
@@ -19,7 +19,15 @@
     </div>
   </header>
 
+  <!-- ═══ Selector de fuente de datos ═══ -->
+  <div class="source-toggle">
+    <button id="showSupabaseBtn" class="source-btn active">Supabase</button>
+    <button id="showUbidotsBtn" class="source-btn">Ubidots MQTT Cloud</button>
+  </div>
+
   <main>
+    <!-- ═══ Vista Supabase (dashboard principal) ═══ -->
+    <div id="supabaseView">
     <section class="summary">
       <div id="estadoCard" class="main-card">
         <span class="label">Estado ambiental</span>
@@ -194,6 +202,50 @@
         <div class="table-footer">
           <span id="recordCount">Mostrando 0 registros</span>
         </div>
+      </div>
+    </section>
+    </div><!-- /supabaseView -->
+
+    <!-- ═══ Vista Ubidots MQTT Cloud ═══ -->
+    <section id="ubidotsView" class="ubidots-view hidden">
+      <div class="panel ubidots-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Ubidots MQTT Cloud</h2>
+            <p>Telemetría publicada desde la Raspberry Pi hacia Ubidots mediante MQTT.</p>
+          </div>
+          <a id="openUbidotsBtn" class="btn-primary" target="_blank" rel="noopener noreferrer">
+            Abrir Ubidots
+          </a>
+        </div>
+
+        <div class="ubidots-info-grid">
+          <div class="card">
+            <span class="label">Device label</span>
+            <strong>aira-chia-nodo1</strong>
+          </div>
+          <div class="card">
+            <span class="label">Comunicación cloud</span>
+            <strong>MQTT</strong>
+          </div>
+          <div class="card">
+            <span class="label">Origen</span>
+            <strong>Raspberry Pi Gateway</strong>
+          </div>
+        </div>
+
+        <div class="ubidots-frame-wrapper">
+          <iframe
+            id="ubidotsFrame"
+            class="ubidots-frame"
+            title="Dashboard Ubidots MQTT Cloud"
+            loading="lazy">
+          </iframe>
+        </div>
+
+        <p id="ubidotsPlaceholderMessage" class="ubidots-note">
+          Esta vista evidencia la comunicación Gateway IoT → plataforma IoT cloud mediante MQTT.
+        </p>
       </div>
     </section>
   </main>

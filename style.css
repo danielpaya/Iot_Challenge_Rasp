@@ -481,3 +481,114 @@ footer {
     width: 100%;
   }
 }
+
+/* ═══ Utility ═══ */
+.hidden {
+  display: none !important;
+}
+
+/* ═══ Status Warning (yellow/orange pill) ═══ */
+.status-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ═══ Source Toggle (Supabase / Ubidots tabs) ═══ */
+.source-toggle {
+  display: flex;
+  gap: 0;
+  padding: 1rem 2rem 0;
+  background: var(--bg);
+}
+
+.source-btn {
+  padding: 0.7rem 1.6rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-weight: bold;
+  border-radius: 10px 10px 0 0;
+  transition: all 0.25s;
+  font-size: 0.95rem;
+}
+
+.source-btn:hover {
+  background: var(--card-soft);
+  color: var(--text);
+}
+
+.source-btn.active {
+  background: var(--panel);
+  color: var(--primary);
+  border-color: var(--primary);
+  border-bottom-color: var(--panel);
+  box-shadow: 0 -3px 12px rgba(59, 130, 246, 0.15);
+}
+
+/* ═══ Ubidots View ═══ */
+.ubidots-view {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.ubidots-panel {
+  border-color: var(--primary);
+}
+
+.ubidots-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.ubidots-frame-wrapper {
+  margin-top: 1rem;
+}
+
+.ubidots-frame {
+  width: 100%;
+  min-height: 700px;
+  border: none;
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.ubidots-note {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* ═══ Responsive: Ubidots & Source Toggle ═══ */
+@media (max-width: 900px) {
+  .source-toggle {
+    padding: 0.75rem 1rem 0;
+  }
+  .source-btn {
+    flex: 1;
+    text-align: center;
+    font-size: 0.85rem;
+    padding: 0.6rem 0.8rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .source-toggle {
+    padding: 0.5rem 0.5rem 0;
+  }
+  .source-btn {
+    font-size: 0.78rem;
+    padding: 0.55rem 0.5rem;
+  }
+  .ubidots-frame {
+    min-height: 520px;
+  }
+  .ubidots-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
