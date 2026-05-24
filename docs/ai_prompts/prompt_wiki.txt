@@ -1,0 +1,343 @@
+=== HERRAMIENTA: Claude (Anthropic) ===
+=== FECHA: Mayo 2026 ===
+=== PROPÓSITO: Generación de la Wiki técnica ===
+
+
+
+Actúa como un Ingeniero de Software e IoT Senior experto en sistemas embebidos, redes industriales, modelado de negocios tecnológicos y documentación técnica. Tu objetivo es redactar el contenido completo, riguroso y detallado de la Wiki de GitHub para nuestro "Sistema IoT de monitoreo de calidad del aire" (ESP32 + Raspberry Pi + MQTT + SQLite + Ubidots + Supabase + AIRA). 
+
+La redacción debe ser extremadamente profesional, fácil de leer, con una narrativa técnica fluida e interesante. Se debe estructurar estrictamente utilizando la jerarquía de títulos Markdown (##, ###, ####) y seguir el formato de citación bibliográfica y de procedencia de datos bajo las normas IEEE.
+
+---
+
+### CONTEXTO DEL PROYECTO Y ESCENARIO REAL
+1. Ubicación Espacial Real: El escenario de despliegue real evaluado es la zona periurbana de Chía, Cundinamarca (Región Sabana Centro, Colombia). Influencia de polvo suspendido por vías secundarias, tránsito y emisiones de amoníaco (NH3) de actividades pecuarias (granjas porcinas y avícolas).
+2. Arquitectura de Red y Enfoque de Cumplimiento:
+   * Ruta Principal de Cumplimiento IoT: ESP32 -> MQTT local (Broker Mosquitto) -> Raspberry Pi Gateway -> SQLite local -> MQTT cloud -> Ubidots.
+   * Ruta Complementaria de Visualización Avanzada: Raspberry Pi Gateway -> Supabase -> GitHub Pages Dashboard -> AIRA (Gemini API).
+   * Restricción de Negocio Crítica: BAJO NINGUNA CIRCUNSTANCIA presentes a Supabase como la plataforma IoT principal. Supabase no opera como broker MQTT, por lo que Ubidots es la ruta de cumplimiento MQTT Cloud oficial.
+3. Fusión Sensorial e ISRs: La ESP32 implementa una lógica de fusión sensorial y tareas separadas en FreeRTOS utilizando un Mutex para garantizar el determinismo temporal y evitar condiciones de carrera.
+
+---
+
+### CÓDIGOS REALES DE PRODUCCIÓN DEL PROYECTO
+
+#### 1. Código Embebido (esp/prueba.ino):
+```cpp
+#include <WiFi.h>
+#include <WebServer.h>
+#include <PubSubClient.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+const char* ssid = "Red_Sabana_2.4G";
+const char* password = "ClaveSeguraWifi";
+const char* mqtt_server = "10.238.66.137"; // IP fija Raspberry Pi
+const int mqtt_port = 1883;
+const char* mqtt_topic = "sabana/aire/nodo1";
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+WebServer server(80);
+
+float tempC = 0.0, humRH = 0.0, pres_hPa = 0.0;
+uint16_t pm1_0 = 0, pm2_5 = 0, pm10 = 0;
+float nh3_ppm = 0.0;
+String currentEstado = "Normal";
+String currentCausa = "Ninguna";
+bool buzzerMuted = false;
+
+SemaphoreHandle_t dataMutex;
+unsigned long lastMqttPublishMs = 0;
+const unsigned long MQTT_INTERVAL_MS = 2000;
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(21, 22);
+  dataMutex = xSemaphoreCreateMutex();
+  setupWiFi();
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  setupWebServer();
+  xTaskCreatePinnedToCore(hardwareTask, "HardwareTask", 4096, NULL, 2, NULL, 0);
+}
+
+void loop() {
+  server.handleClient();
+  if (!mqttClient.connected()) { reconnectMQTT(); }
+  mqttClient.loop();
+  unsigned long now = millis();
+  if (now - lastMqttPublishMs >= MQTT_INTERVAL_MS) {
+    lastMqttPublishMs = now;
+    publishSensorDataMQTT();
+  }
+  delay(2);
+}
+
+void setupWiFi() {
+  delay(10);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+}
+
+void reconnectMQTT() {
+  while (!mqttClient.connected()) {
+    String clientId = "ESP32_Aire_" + String((uint32_t)ESP.getEfuseMac(), HEX);
+    if (mqttClient.connect(clientId.c_str())) {
+      Serial.println("Conectado");
+    } else {
+      delay(3000);
+    }
+  }
+}
+
+void publishSensorDataMQTT() {
+  xSemaphoreTake(dataMutex, portMAX_DELAY);
+  String json = "{";
+  json += "\"pm1\":" + String(pm1_0) + ",";
+  json += "\"pm25\":" + String(pm2_5) + ",";
+  json += "\"pm10\":" + String(pm10) + ",";
+  json += "\"nh3\":" + String(nh3_ppm, 2) + ",";
+  json += "\"t\":" + (isnan(tempC) ? "null" : String(tempC, 1)) + ",";
+  json += "\"h\":" + (isnan(humRH) ? "null" : String(humRH, 1)) + ",";
+  json += "\"p\":" + (isnan(pres_hPa) ? "null" : String(pres_hPa, 1)) + ",";
+  json += "\"estado\":\"" + currentEstado + "\",";
+  json += "\"causa\":\"" + currentCausa + "\",";
+  json += "\"muted\":" + String(buzzerMuted ? "true" : "false");
+  json += "}";
+  xSemaphoreGive(dataMutex);
+  mqttClient.publish(mqtt_topic, json.c_str());
+}
+
+void hardwareTask(void * parameter) {
+  for(;;) {
+    xSemaphoreTake(dataMutex, portMAX_DELAY);
+    pm2_5 = random(10, 65);
+    nh3_ppm = random(100, 450) / 100.0;
+    tempC = 16.5; humRH = 72.0; pres_hPa = 1013.2;
+    if (pm2_5 > 55 || nh3_ppm > 4.0) {
+      currentEstado = "Peligro";
+      currentCausa = (pm2_5 > 55) ? "Alto Material Particulado" : "Picos de Amoniaco Periurbano";
+    } else if (pm2_5 > 25) {
+      currentEstado = "Precaucion";
+      currentCausa = "Incremento moderado";
+    } else {
+      currentEstado = "Normal";
+      currentCausa = "Estable";
+    }
+    xSemaphoreGive(dataMutex);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+}
+
+void setupWebServer() {
+  server.on("/", HTTP_GET, []() {
+    xSemaphoreTake(dataMutex, portMAX_DELAY);
+    String html = "<html><body><h1>Dashboard Local ESP32</h1><p>Estado: " + currentEstado + "</p></body></html>";
+    xSemaphoreGive(dataMutex);
+    server.send(200, "text/html", html);
+  });
+  server.begin();
+}
+
+
+2. Código Orquestador del Edge Gateway (gateway_local.py):
+
+#!/usr/bin/env python3
+import os
+import json
+import sqlite3
+from datetime import datetime, timezone
+import paho.mqtt.client as mqtt
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+sb_url = os.getenv("SUPABASE_URL")
+sb_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(sb_url, sb_key) if sb_url and sb_key else None
+
+UBIDOTS_MQTT_ENABLED = os.getenv("UBIDOTS_MQTT_ENABLED", "false").lower() == "true"
+UBIDOTS_MQTT_HOST = os.getenv("UBIDOTS_MQTT_HOST", "industrial.api.ubidots.com")
+UBIDOTS_MQTT_PORT = int(os.getenv("UBIDOTS_MQTT_PORT", "1883"))
+UBIDOTS_TOKEN = os.getenv("UBIDOTS_TOKEN")
+UBIDOTS_DEVICE_LABEL = os.getenv("UBIDOTS_DEVICE_LABEL", "aira-chia-nodo1")
+UBIDOTS_TOPIC = f"/v1.6/devices/{UBIDOTS_DEVICE_LABEL}"
+
+DB_PATH = os.path.join(os.path.dirname(__file__), 'air_quality.db')
+
+def init_sqlite_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS readings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp_utc TEXT NOT NULL,
+        pm1 REAL,
+        pm25 REAL,
+        pm10 REAL,
+        nh3 REAL,
+        temperature REAL,
+        humidity REAL,
+        pressure REAL,
+        estado TEXT,
+        causa TEXT,
+        muted INTEGER,
+        raw_json TEXT NOT NULL
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+def save_reading_sqlite(row):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA busy_timeout=5000;")
+        query = """INSERT INTO readings (timestamp_utc, pm1, pm25, pm10, nh3, temperature, humidity, pressure, estado, causa, muted, raw_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"""
+        cursor.execute(query, (
+            row["timestamp_utc"], row["pm1"], row["pm25"], row["pm10"], row["nh3"],
+            row["temperature"], row["humidity"], row["pressure"], row["estado"],
+            row["causa"], 1 if row["muted"] else 0, json.dumps(row["raw_json"])
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error SQLite: {e}")
+        return False
+
+def save_reading_supabase(row):
+    if supabase is None: return False
+    try:
+        supabase.table("readings").insert(row).execute()
+        return True
+    except Exception as e:
+        print(f"Error Supabase: {e}")
+        return False
+
+def estado_to_code(estado_str):
+    est = str(estado_str).lower()
+    if "peligro" in est: return 2
+    if "precaucion" in est: return 1
+    return 0
+
+def publish_cloud_mqtt(row):
+    if not UBIDOTS_MQTT_ENABLED or not UBIDOTS_TOKEN: return False
+    try:
+        ubidots_payload = {
+            "pm1": row["pm1"], "pm25": row["pm25"], "pm10": row["pm10"], "nh3": row["nh3"],
+            "temperature": row["temperature"], "humidity": row["humidity"], "pressure": row["pressure"],
+            "estado_code": estado_to_code(row["estado"]), "muted": 1 if row["muted"] else 0
+        }
+        client = mqtt.Client(client_id="Gateway_Pi_Cloud")
+        client.username_pw_set(UBIDOTS_TOKEN, password="")
+        client.connect(UBIDOTS_MQTT_HOST, UBIDOTS_MQTT_PORT, 60)
+        result = client.publish(UBIDOTS_TOPIC, json.dumps(ubidots_payload), qos=0)
+        client.disconnect()
+        return result.rc == mqtt.MQTT_ERR_SUCCESS
+    except Exception as e:
+        print(f"Error Ubidots: {e}")
+        return False
+
+def on_message(client, userdata, msg):
+    try:
+        payload_raw = json.loads(msg.payload.decode("utf-8"))
+        timestamp_utc = datetime.now(timezone.utc).isoformat()
+        row = {
+            "timestamp_utc": timestamp_utc,
+            "pm1": payload_raw.get("pm1"), "pm25": payload_raw.get("pm25"), "pm10": payload_raw.get("pm10"),
+            "nh3": payload_raw.get("nh3"), "temperature": payload_raw.get("t"), "humidity": payload_raw.get("h"),
+            "pressure": payload_raw.get("p"), "estado": payload_raw.get("estado"), "causa": payload_raw.get("causa"),
+            "muted": bool(payload_raw.get("muted")), "raw_json": payload_raw
+        }
+        sql_ok = save_reading_sqlite(row)
+        sb_ok = save_reading_supabase(row)
+        mqtt_ok = publish_cloud_mqtt(row)
+        from gateway_ai import process_aira_logic
+        ai_processed = process_aira_logic(row)
+    except Exception as e:
+        print(f"Error parse: {e}")
+
+def main():
+    init_sqlite_db()
+    local_client = mqtt.Client(client_id="Gateway_Pi_Local")
+    local_client.on_message = on_message
+    local_client.connect("localhost", 1883, 60)
+    local_client.subscribe("sabana/aire/nodo1")
+    local_client.loop_forever()
+
+if __name__ == "__main__":
+    main()
+
+
+MODELO DE NEGOCIO CANVAS DE AIRA (BASADO EN EL PDF ADJUNTO)
+
+Redacta el Business Model Canvas de AIRA en una tabla de doble entrada formal que contemple:
+
+Key Partners: Proveedores de sensores y componentes electrónicos, universidades y laboratorios ambientales, instituciones educativas, entidades públicas ambientales, empresas de impresión 3D y ensamble, centros de innovación o investigación IoT.
+
+Key Activities: Diseño y ensamble del dispositivo IoT, lectura de sensores ambientales, programación del ESP32 y desarrollo del dashboard web.
+
+Key Resources: Hardware de ESP32, sensores de partículas, gas, temperatura, humedad y presión, dashboard web, firmware del sistema.
+
+Value Propositions: AIRA permite monitorear la calidad del aire en tiempo real mediante sensores IoT de bajo costo, generando alertas preventivas cuando detecta condiciones ambientales de riesgo.
+
+Customer Relationships: Acompañamiento en instalación, capacitación para el uso del dashboard, soporte técnico remoto.
+
+Channels: Demostraciones presenciales, ferias académicas y tecnológicas, presentaciones a colegios y universidades.
+
+Customer Segments: Universidades, colegios, laboratorios, empresas con espacios cerrados o zonas de producción, talleres o áreas de soldadura, entidades públicas ambientales, centros de investigación, administradores de edificios, oficinas o aulas.
+
+Cost Structure: Compra de sensores ambientales, ESP32, pantalla LCD, buzzer, LED RGB, fuente de alimentación y carcasa; ensamble del prototipo, programación del firmware, desarrollo del dashboard web, pruebas de funcionamiento, calibración básica, instalación, soporte técnico y material de presentación.
+
+Revenue Streams: Venta del dispositivo IoT, servicio de instalación y configuración, mantenimiento periódico, personalización del dashboard, kits educativos para colegios y universidades, capacitaciones en IoT, generación de reportes analíticos básicos sobre calidad del aire.
+
+ESTRUCTURA DE LA WIKI REQUERIDA (REDACTA TODAS LAS SECCIONES SIN TRUNCAR)
+
+Genera un único documento Markdown (.md) robusto, de muy alta extensión y formalidad académica. Bajo ninguna circunstancia utilices placeholders del tipo "el código va aquí" o "completa la tabla". Escribe cada sección de manera exhaustiva:
+
+PORTADA E INFORMACIÓN GENERAL: Institución (Universidad de la Sabana), Facultad, Asignatura (IoT 2026-1), Título. Tabla de Co-evaluación del Equipo (Integrante 1: Hardware, Integrante 2: Gateway, Integrante 3: Cloud, Integrante 4: Frontend/QA) detallando sus contribuciones.
+
+RESUMEN EJECUTIVO (BILINGÜE): Versiones detalladas en Español e Inglés sobre el prototipo de bajo costo para Chía, el balance de lógicas locales de alerta y la activación inteligente de AIRA.
+
+CONTEXTUALIZACIÓN DEL PROBLEMA: Impactos de PM2.5, PM10 y gases ($NO_2$, $NH_3$) en Sabana Centro. Cita en formato IEEE a la CAR, la OMS y especificaciones técnicas. Justificación de Chía como zona periurbana.
+
+MATRIZ DE TRAZABILIDAD DE REQUERIMIENTOS: Tabla formal cruzando requisitos del Challenge con sus componentes e implementaciones técnicas.
+
+ARQUITECTURA GENERAL (DIAGRAMA DE TOPOLOGÍA): Inserta el diagrama Mermaid de la Red Híbrida. Explica cada capa.
+
+DISEÑO DE HARDWARE: Componentes (ESP32, BME280, MQ135, PMS5003, LCD, LED RGB, Buzzer), justificaciones de ingeniería y limitaciones de instrumentación.
+
+DISEÑO DE SOFTWARE EMBEBIDO: Inserta el código esp/prueba.ino. Añade el diagrama Mermaid de Concurrencia (FreeRTOS Core 0 vs Core 1 con Mutex). Explica de manera exhaustiva el control de exclusión mutua.
+
+EDGE GATEWAY (RASPBERRY PI): Instrucciones de instalación Bash paso a paso, archivos de configuración /etc/mosquitto/conf.d/iot.conf, setups de virtualenv y empaquetamiento Python.
+
+PERSISTENCIA LOCAL (SQLite): Inserta el diagrama Mermaid de la secuencia de datos temporal. Explica el esquema relacional SQL de readings y justifica el uso de PRAGMA journal_mode=WAL; y PRAGMA busy_timeout=5000;.
+
+PROTOCOLO MQTT HACIA UBIDOTS: Rutinas en Python para empaquetado del JSON y mapeo de estados cualitativos a numéricos (estado_code).
+
+PERSISTENCIA EN SUPABASE Y ALARMAS DE VOZ: Configuración en Supabase y uso innovador de la Web Speech API en el frontend (GitHub Pages) ante condiciones de Peligro.
+
+MÓDULO DE INTELIGENCIA ARTIFICIAL (AIRA): Muestra cómo se protegen las claves de Gemini en el backend. Explica detalladamente las lógicas de cooldown automática (600s) y manual (60s). Inserta el diagrama Mermaid del pipeline de AIRA.
+
+DEMONIZACIÓN CON SYSTEMD: Configuración completa del archivo /etc/systemd/system/iot-gateway.service con directivas Restart=always y monitoreo mediante journalctl.
+
+PROCESO DE DUPLICACIÓN PASO A PASO: Guía impecable desde cero, incluyendo el DDL de Supabase para las tablas readings, ai_requests y ai_recommendations.
+
+MODELO DE NEGOCIO ECO_SISTEMA AIRA: Redacta y detalla de forma exhaustiva la tabla de Business Model Canvas de AIRA basada en las directrices dadas.
+
+CONFIGURACIÓN EXPERIMENTAL Y PROTOCOLO DE PRUEBAS: Matriz de pruebas estructurada (Procedimiento, Criterio de Aceptación, Evidencia).
+
+LIMITACIONES Y TRABAJO FUTURO: TLS local, calibración no lineal del MQ135, TinyML en el Edge y encapsulamiento IP67 autónomo.
+
+ANEXOS Y REFERENCIAS BIBLIOGRÁFICAS (IEEE): Enlaces ficticios estructurados a Teams y al repositorio de GitHub Pages. Formatea al menos 7 referencias bajo el estándar formal IEEE.
+
+CÓDIGOS MERMAID EXPRESADOS EN TEXTO PLANO QUE DEBES INCLUIR EN TU RESPUESTA:
+
+(Inserta exactamente las definiciones de Mermaid proporcionadas en las especificaciones del sistema en los capítulos correspondientes para que se rendericen en la Wiki de GitHub).
+
+Comienza a redactar la Wiki completa en formato Markdown ahora mismo.
