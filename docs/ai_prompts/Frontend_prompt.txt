@@ -1,4 +1,7 @@
-Prompt utilizado en claude
+=== HERRAMIENTA: Antigravity con cloud opus ===
+=== FECHA: Mayo 2026 ===
+=== PROPÓSITO: Generación del frontend y adicionarle la voz de alerta ===
+
 
 Estoy trabajando en un proyecto IoT de monitoreo de calidad del aire para el Challenge #3 del curso Internet de las Cosas.
 
