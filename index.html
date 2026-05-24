@@ -37,13 +37,36 @@
 
   <!-- ═══ Selector de fuente de datos ═══ -->
   <div class="source-toggle">
-    <button id="showSupabaseBtn" class="source-btn active">Supabase</button>
-    <button id="showUbidotsBtn" class="source-btn">Ubidots MQTT Cloud</button>
+    <button id="showUbidotsBtn" class="source-btn active">Ubidots MQTT Cloud</button>
+    <button id="showSupabaseBtn" class="source-btn">Supabase</button>
   </div>
 
   <main>
+    <section id="airaSection" class="panel aira-panel" style="margin-bottom: 1.5rem;">
+      <div class="aira-header">
+        <img id="airaAvatar" class="aira-avatar" src="assets/aira-avatar.png" alt="Avatar de AIRA">
+        <div class="aira-title-group">
+          <h2>AIRA</h2>
+          <p>Asistente Inteligente de Recomendación Ambiental</p>
+        </div>
+        <button id="requestAiraBtn" class="btn-primary">Solicitar recomendación de AIRA</button>
+      </div>
+
+      <div class="aira-content">
+        <p id="airaRecommendation">AIRA aún no ha generado recomendaciones.</p>
+        <div class="aira-meta">
+          <span id="airaTimestamp">Última recomendación: --</span>
+          <span id="airaTrigger">Activación: --</span>
+          <span id="airaAnalyzedState">Estado analizado: --</span>
+          <span id="airaAnalyzedCause">Causa: --</span>
+          <span id="airaModel">Modelo: --</span>
+        </div>
+        <p id="airaRequestStatus" class="aira-request-status">AIRA lista.</p>
+      </div>
+    </section>
+
     <!-- ═══ Vista Supabase (dashboard principal) ═══ -->
-    <div id="supabaseView">
+    <div id="supabaseView" class="hidden">
     <section class="summary">
       <div id="estadoCard" class="main-card">
         <span class="label">Estado ambiental</span>
@@ -100,29 +123,6 @@
         <span class="label">Presión</span>
         <strong id="pressure">--</strong>
         <small>hPa</small>
-      </div>
-    </section>
-
-    <section id="airaSection" class="panel aira-panel">
-      <div class="aira-header">
-        <img id="airaAvatar" class="aira-avatar" src="assets/aira-avatar.png" alt="Avatar de AIRA">
-        <div class="aira-title-group">
-          <h2>AIRA</h2>
-          <p>Asistente Inteligente de Recomendación Ambiental</p>
-        </div>
-        <button id="requestAiraBtn" class="btn-primary">Solicitar recomendación de AIRA</button>
-      </div>
-
-      <div class="aira-content">
-        <p id="airaRecommendation">AIRA aún no ha generado recomendaciones.</p>
-        <div class="aira-meta">
-          <span id="airaTimestamp">Última recomendación: --</span>
-          <span id="airaTrigger">Activación: --</span>
-          <span id="airaAnalyzedState">Estado analizado: --</span>
-          <span id="airaAnalyzedCause">Causa: --</span>
-          <span id="airaModel">Modelo: --</span>
-        </div>
-        <p id="airaRequestStatus" class="aira-request-status">AIRA lista.</p>
       </div>
     </section>
 
@@ -232,7 +232,7 @@
     </div><!-- /supabaseView -->
 
     <!-- ═══ Vista Ubidots MQTT Cloud ═══ -->
-    <section id="ubidotsView" class="ubidots-view hidden">
+    <section id="ubidotsView" class="ubidots-view">
       <div class="panel ubidots-panel">
         <div class="panel-header">
           <div>

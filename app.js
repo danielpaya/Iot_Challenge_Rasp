@@ -782,6 +782,6 @@ function initSimpleLogin() {
 initSimpleLogin();
 initVoiceAlerts();
 initUbidotsView();
-showDataSource("supabase");
+showDataSource("ubidots");
 pollingLoop();
-setInterval(pollingLoop, POLLING_INTERVAL_MS);
+setInterval(pollingLoop, POLLING_INTERVAL_MS);
