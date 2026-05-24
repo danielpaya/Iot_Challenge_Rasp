@@ -42,6 +42,12 @@ const elements = {
   voiceToggle: document.getElementById("voiceToggle"),
   filterStatus: document.getElementById("filterStatus"),
 
+  // Alarm Control
+  alarmPhysicalStatus: document.getElementById("alarmPhysicalStatus"),
+  alarmControlBtn: document.getElementById("alarmControlBtn"),
+  alarmCommandStatus: document.getElementById("alarmCommandStatus"),
+  alarmControlCard: document.getElementById("alarmControlCard"),
+
   // AIRA
   airaSection: document.getElementById("airaSection"),
   airaRecommendation: document.getElementById("airaRecommendation"),
@@ -80,6 +86,10 @@ let pmChart;
 let filtersActive = false;
 let voiceAlertsEnabled = false;
 let lastSpokenDangerId = null;
+
+let currentMutedState = null;
+let pendingAlarmCommand = false;
+let desiredMutedState = null;
 
 // --- Formatting Helpers ---
 function formatValue(value, decimals = 1) {
@@ -316,7 +326,105 @@ function updateCards(latest) {
   elements.pressure.textContent = formatValue(latest.pressure, 1);
 
   elements.lastUpdate.textContent = `Última actualización: ${formatDate(latest.timestamp_utc)}`;
+  
+  updateAlarmControl(latest);
 }
+
+function updateAlarmControl(latest) {
+  if (!latest || latest.muted === null || latest.muted === undefined) {
+    elements.alarmPhysicalStatus.textContent = "--";
+    elements.alarmControlBtn.textContent = "Cargando...";
+    elements.alarmControlBtn.disabled = true;
+    elements.alarmCommandStatus.textContent = "Esperando datos de alarma...";
+    return;
+  }
+
+  const confirmedMutedState = Boolean(latest.muted);
+  currentMutedState = confirmedMutedState;
+
+  elements.alarmPhysicalStatus.textContent = confirmedMutedState
+    ? "Alarma silenciada"
+    : "Alarma activa";
+
+  elements.alarmControlBtn.disabled = false;
+
+  elements.alarmControlBtn.classList.remove(
+    "btn-alarm-active",
+    "btn-alarm-muted",
+    "btn-alarm-pending"
+  );
+
+  if (pendingAlarmCommand) {
+    if (desiredMutedState === confirmedMutedState) {
+      pendingAlarmCommand = false;
+      desiredMutedState = null;
+      elements.alarmCommandStatus.textContent = "Estado confirmado desde ESP32.";
+    } else {
+      elements.alarmControlBtn.disabled = true;
+      elements.alarmControlBtn.classList.add("btn-alarm-pending");
+      elements.alarmControlBtn.textContent = "Esperando confirmación...";
+      elements.alarmCommandStatus.textContent =
+        "Comando enviado, esperando confirmación de la ESP32...";
+      return;
+    }
+  } else {
+    elements.alarmCommandStatus.textContent = "Estado sincronizado con ESP32.";
+  }
+
+  if (confirmedMutedState) {
+    elements.alarmControlBtn.textContent = "Reactivar alarma física";
+    elements.alarmControlBtn.classList.add("btn-alarm-muted");
+  } else {
+    elements.alarmControlBtn.textContent = "Silenciar alarma física";
+    elements.alarmControlBtn.classList.add("btn-alarm-active");
+  }
+}
+
+async function sendAlarmMuteCommand() {
+  if (currentMutedState === null || pendingAlarmCommand) {
+    return;
+  }
+
+  desiredMutedState = !currentMutedState;
+  pendingAlarmCommand = true;
+
+  elements.alarmControlBtn.disabled = true;
+  elements.alarmControlBtn.classList.remove("btn-alarm-active", "btn-alarm-muted");
+  elements.alarmControlBtn.classList.add("btn-alarm-pending");
+  elements.alarmControlBtn.textContent = "Enviando comando...";
+  elements.alarmCommandStatus.textContent =
+    "Comando enviado, esperando confirmación de la ESP32...";
+
+  const { error } = await supabase.from("alarm_commands").insert({
+    command: "set_alarm_mute",
+    muted: desiredMutedState,
+    status: "pending",
+    source: "dashboard"
+  });
+
+  if (error) {
+    console.error("Error enviando comando de alarma:", error);
+    pendingAlarmCommand = false;
+    desiredMutedState = null;
+    elements.alarmCommandStatus.textContent =
+      "Error enviando comando de alarma.";
+    updateAlarmControl({ muted: currentMutedState });
+    return;
+  }
+
+  console.log("Comando de alarma enviado:", desiredMutedState);
+
+  setTimeout(() => {
+    if (pendingAlarmCommand) {
+      pendingAlarmCommand = false;
+      desiredMutedState = null;
+      elements.alarmCommandStatus.textContent =
+        "No se recibió confirmación de la ESP32. Revise conexión.";
+      updateAlarmControl({ muted: currentMutedState });
+    }
+  }, 20000);
+}
+
 
 function updateTable(rows) {
   elements.recordCount.textContent = `Mostrando ${rows.length} registro(s)${filtersActive ? " filtrado(s)" : ""}`;
@@ -632,6 +740,7 @@ function clearFilters() {
 elements.btnApplyFilters.addEventListener("click", applyFilters);
 elements.btnClearFilters.addEventListener("click", clearFilters);
 elements.requestAiraBtn.addEventListener("click", requestAiraRecommendation);
+elements.alarmControlBtn.addEventListener("click", sendAlarmMuteCommand);
 
 // Source toggle listeners
 elements.showSupabaseBtn.addEventListener("click", () => showDataSource("supabase"));

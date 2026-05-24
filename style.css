@@ -664,3 +664,43 @@ footer {
   font-weight: bold;
   min-height: 1.3em;
 }
+
+/* ═══ Alarm Control ═══ */
+.alarm-control-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btn-alarm-control {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-alarm-active {
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+}
+
+.btn-alarm-muted {
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+}
+
+.btn-alarm-pending {
+  background: rgba(245, 158, 11, 0.9);
+  color: #020617;
+  cursor: wait;
+}
+
+.btn-alarm-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#alarmCommandStatus {
+  color: var(--muted);
+}

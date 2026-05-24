@@ -21,6 +21,9 @@ MQTT_HOST = "localhost"
 MQTT_PORT = 1883
 MQTT_TOPIC = "sabana/aire/nodo1"
 
+ALARM_COMMANDS_TABLE = "alarm_commands"
+MQTT_CMD_TOPIC = "sabana/aire/nodo1/cmd"
+
 
 UBIDOTS_MQTT_ENABLED = os.getenv("UBIDOTS_MQTT_ENABLED", "false").lower() == "true"
 UBIDOTS_MQTT_HOST = os.getenv("UBIDOTS_MQTT_HOST", "industrial.api.ubidots.com")
@@ -153,6 +156,99 @@ def save_reading_sqlite(row):
     conn.commit()
     conn.close()
 
+# =========================
+# Apagar alarmas remotamente desde el dashboard
+# =========================
+
+def fetch_pending_alarm_command():
+    if supabase is None:
+        return None
+
+    try:
+        response = (
+            supabase
+            .table(ALARM_COMMANDS_TABLE)
+            .select("*")
+            .eq("status", "pending")
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            return response.data[0]
+
+        return None
+
+    except Exception as e:
+        print(f"Error consultando comandos de alarma: {e}")
+        return None
+
+
+def mark_alarm_command_processed(command_id, ok=True, error=None):
+    if supabase is None or command_id is None:
+        return
+
+    try:
+        payload = {
+            "status": "processed" if ok else "error",
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+            "error": error
+        }
+
+        (
+            supabase
+            .table(ALARM_COMMANDS_TABLE)
+            .update(payload)
+            .eq("id", command_id)
+            .execute()
+        )
+
+    except Exception as e:
+        print(f"Error actualizando comando de alarma: {e}")
+
+
+def publish_alarm_command_to_esp(client, command):
+    try:
+        payload = {
+            "command": "set_alarm_mute",
+            "muted": bool(command.get("muted"))
+        }
+
+        payload_json = json.dumps(payload, separators=(",", ":"))
+        
+        result = client.publish(MQTT_CMD_TOPIC, payload_json, qos=0)
+
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            print(f"Comando enviado a ESP32 | {payload_json}")
+            return True
+
+        print(f"Error publicando comando a ESP32. rc={result.rc}")
+        return False
+
+    except Exception as e:
+        print(f"Error enviando comando de alarma a ESP32: {e}")
+        return False
+
+
+def process_alarm_command_logic(client):
+    pending_command = fetch_pending_alarm_command()
+
+    if not pending_command:
+        return False
+
+    ok = publish_alarm_command_to_esp(client, pending_command)
+
+    if ok:
+        mark_alarm_command_processed(pending_command.get("id"), ok=True)
+    else:
+        mark_alarm_command_processed(
+            pending_command.get("id"),
+            ok=False,
+            error="No se pudo publicar el comando MQTT hacia la ESP32"
+        )
+
+    return ok
 
 # =========================
 # Normalización de datos
@@ -546,6 +642,8 @@ def on_message(client, userdata, msg):
 
         mqtt_cloud_ok = publish_cloud_mqtt(row)
 
+        alarm_cmd_ok = process_alarm_command_logic(client)
+
         print(
             f"Guardado | "
             f"PM2.5={row['pm25']} | "
@@ -554,9 +652,10 @@ def on_message(client, userdata, msg):
             f"SQLite=OK | "
             f"Supabase={'OK' if cloud_ok else 'NO'} | "
             f"AIRA={'OK' if ai_ok else 'NO'} | "
+            f"AlarmCmd={'OK' if alarm_cmd_ok else 'NO'} | "
             f"MQTT_Cloud={'OK' if mqtt_cloud_ok else 'NO'}"
         )
-
+    
     except json.JSONDecodeError:
         print(f"Mensaje recibido no es JSON valido: {msg.payload.decode('utf-8', errors='ignore')}")
 

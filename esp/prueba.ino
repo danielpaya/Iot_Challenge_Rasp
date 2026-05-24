@@ -22,9 +22,10 @@ WebServer server(80);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-const char* mqtt_server = "10.238.66.137";
+const char* mqtt_server = "10.97.207.137";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "sabana/aire/nodo1";
+const char* mqtt_cmd_topic = "sabana/aire/nodo1/cmd";
 
 unsigned long lastMqttPublishMs = 0;
 const unsigned long MQTT_INTERVAL_MS = 2000;
@@ -652,6 +653,9 @@ void reconnectMQTT() {
 
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println("conectado");
+      mqttClient.subscribe(mqtt_cmd_topic);
+      Serial.print("Suscrito a comandos: ");
+      Serial.println(mqtt_cmd_topic);
     } else {
       Serial.print("fallo, rc=");
       Serial.print(mqttClient.state());
@@ -687,6 +691,32 @@ void publishSensorDataMQTT() {
 }
 
 
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+  String message = "";
+
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+
+  Serial.print("Comando MQTT recibido en ");
+  Serial.print(topic);
+  Serial.print(": ");
+  Serial.println(message);
+
+  if (String(topic) == mqtt_cmd_topic) {
+    if (message.indexOf("\"command\":\"set_alarm_mute\"") != -1) {
+      bool newMutedState = message.indexOf("\"muted\":true") != -1;
+
+      xSemaphoreTake(dataMutex, portMAX_DELAY);
+      buzzerMuted = newMutedState;
+      xSemaphoreGive(dataMutex);
+
+      Serial.print("Estado de alarma actualizado por MQTT. muted=");
+      Serial.println(newMutedState ? "true" : "false");
+    }
+  }
+}
+
 
 // =====================================================
 // SETUP 
@@ -717,7 +747,7 @@ void setup(){
   Serial.println("\nWiFi conectado. IP: ");
   Serial.println(WiFi.localIP());
   mqttClient.setServer(mqtt_server, mqtt_port);
-  
+  mqttClient.setCallback(onMqttMessage);
 
   server.collectHeaders(headerkeys, headerkeyssize);
   server.on("/", HTTP_GET, handleRoot);
