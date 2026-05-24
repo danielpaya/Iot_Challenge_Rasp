@@ -1,4 +1,7 @@
-Prompt Implementación AIRA
+=== HERRAMIENTA: Antigravity con cloud opus===
+=== FECHA: Mayo 2026 ===
+=== PROPÓSITO: Integrar la sección AIRA con avatar y botón de solicitud ===
+
 
 Estoy trabajando en el frontend de un dashboard IoT para monitoreo de calidad del aire. Ya existe un proyecto funcional en HTML, CSS y JavaScript estático, compatible con GitHub Pages. Necesito que implementes la integración visual y funcional de AIRA, el módulo de Inteligencia Artificial del sistema.
 
