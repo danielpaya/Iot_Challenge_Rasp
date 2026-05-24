@@ -1,0 +1,400 @@
+Prompt Implementación AIRA
+
+Estoy trabajando en el frontend de un dashboard IoT para monitoreo de calidad del aire. Ya existe un proyecto funcional en HTML, CSS y JavaScript estático, compatible con GitHub Pages. Necesito que implementes la integración visual y funcional de AIRA, el módulo de Inteligencia Artificial del sistema.
+
+Contexto técnico del proyecto:
+
+El sistema completo ya funciona así:
+
+ESP32 → MQTT → Raspberry Pi → SQLite local + Supabase → Dashboard web en GitHub Pages
+
+La ESP32 mide:
+- PM1.0
+- PM2.5
+- PM10
+- NH3 estimado
+- Temperatura
+- Humedad
+- Presión
+- Estado ambiental: Normal / Precaución / Peligro
+- Causa principal del estado
+- muted
+
+La Raspberry Pi:
+- Corre Mosquitto.
+- Recibe datos MQTT desde la ESP32.
+- Guarda datos en SQLite.
+- Sube los datos a Supabase.
+- Ejecuta gateway_local.py automáticamente con systemd.
+- Integra Gemini API desde backend, no desde frontend.
+- La API key de Gemini está solo en la Raspberry.
+- La secret key de Supabase está solo en la Raspberry.
+- El frontend usa únicamente la Publishable Key de Supabase.
+
+El dashboard ya tiene:
+- index.html
+- style.css
+- app.js
+- Supabase JS Client
+- Chart.js
+- Tarjetas principales
+- Gráfica histórica
+- Tabla de lecturas
+- Filtros avanzados
+- Polling cada 3 segundos
+- Alertas de voz cuando el estado es Peligro
+
+Ahora necesito agregar la sección de AIRA.
+
+AIRA significa:
+
+AIRA — Asistente Inteligente de Recomendación Ambiental
+
+AIRA es una IA contextualizada para autoridades locales de Chía, Cundinamarca, en una zona periurbana de Sabana Centro con influencia de vías locales, áreas residenciales y actividad agropecuaria cercana.
+
+AIRA no debe estar activa todo el tiempo porque consume tokens. La lógica backend ya está pensada para que AIRA se active:
+1. Automáticamente cuando el estado sea Peligro.
+2. Manualmente cuando el usuario presione un botón en el dashboard.
+
+El frontend NO debe llamar directamente a Gemini.
+El frontend NO debe usar ninguna API key de Gemini.
+El frontend NO debe usar secret key de Supabase.
+El frontend solo debe:
+1. Leer recomendaciones desde la tabla ai_recommendations.
+2. Crear solicitudes manuales insertando registros en la tabla ai_requests.
+
+Tablas de Supabase ya creadas o previstas:
+
+Tabla public.ai_recommendations:
+- id
+- timestamp_utc
+- trigger_source
+- estado
+- causa
+- recommendation
+- model
+- input_json
+- created_at
+
+Tabla public.ai_requests:
+- id
+- request_type
+- status
+- source
+- created_at
+- processed_at
+- error
+
+Políticas esperadas:
+- ai_recommendations permite SELECT a anon.
+- ai_requests permite INSERT a anon solo con request_type='manual' y status='pending'.
+- El dashboard no debe actualizar ni borrar ai_requests.
+
+Archivos que debes modificar:
+- index.html
+- style.css
+- app.js
+
+No modificar:
+- esp/prueba.ino
+- raspberry/gateway_local.py
+- archivos de configuración secretos
+- no agregar backend
+- no usar frameworks pesados
+- mantener compatibilidad con GitHub Pages
+
+Objetivo principal:
+
+Implementar en el dashboard una sección visual y funcional para AIRA.
+
+REQUISITOS DE index.html:
+
+1. Agregar una nueva sección visible en el dashboard, preferiblemente después de las tarjetas principales y antes de la gráfica histórica.
+
+La sección debe llamarse:
+
+AIRA
+Asistente Inteligente de Recomendación Ambiental
+
+2. La sección debe incluir:
+- Avatar de AIRA.
+- Nombre: AIRA.
+- Subtítulo: Asistente Inteligente de Recomendación Ambiental.
+- Texto descriptivo breve.
+- Última recomendación generada.
+- Fecha/hora de la recomendación.
+- Tipo de activación:
+  - Automática por estado Peligro
+  - Manual desde dashboard
+- Estado analizado.
+- Causa analizada.
+- Modelo usado, si existe.
+- Botón: "Solicitar recomendación de AIRA".
+- Texto de estado de solicitud:
+  - "AIRA lista"
+  - "Solicitud enviada"
+  - "Esperando respuesta de la Raspberry"
+  - "Recomendación actualizada"
+  - "Error solicitando recomendación"
+
+3. Usa IDs claros para conectar con JavaScript. Por ejemplo:
+- airaSection
+- airaAvatar
+- airaRecommendation
+- airaTimestamp
+- airaTrigger
+- airaAnalyzedState
+- airaAnalyzedCause
+- airaModel
+- requestAiraBtn
+- airaRequestStatus
+
+4. Agregar una imagen de avatar para AIRA.
+
+Necesito que generes también una imagen bonita para el avatar de AIRA.
+
+Concepto visual de la imagen:
+- AIRA debe estar inspirada en una elfa del viento.
+- Debe ser mujer.
+- Estilo elegante, tecnológico y ambiental.
+- Debe parecer un asistente de IA ambiental.
+- Cabello claro o plateado movido por el viento.
+- Detalles suaves en tonos azul, blanco, verde menta o turquesa.
+- Elementos visuales de aire, hojas, partículas flotantes o corrientes de viento.
+- Estética limpia, moderna y no demasiado fantástica.
+- Debe combinar con un dashboard oscuro.
+- Debe funcionar bien como avatar circular.
+- No usar personajes existentes ni estilos protegidos.
+- No usar texto dentro de la imagen.
+- La imagen debe exportarse o colocarse como:
+  assets/aira-avatar.png
+
+Si no puedes generar el archivo real de imagen, crea la carpeta assets/ y deja una referencia clara para reemplazarla, pero idealmente genera el avatar como imagen.
+
+5. En index.html, el avatar debe cargarse desde:
+assets/aira-avatar.png
+
+Ejemplo de estructura deseada:
+
+<section id="airaSection" class="panel aira-panel">
+  <div class="aira-header">
+    <img id="airaAvatar" class="aira-avatar" src="assets/aira-avatar.png" alt="Avatar de AIRA">
+    <div>
+      <h2>AIRA</h2>
+      <p>Asistente Inteligente de Recomendación Ambiental</p>
+    </div>
+    <button id="requestAiraBtn" class="btn-primary">Solicitar recomendación de AIRA</button>
+  </div>
+
+  <div class="aira-content">
+    <p id="airaRecommendation">AIRA aún no ha generado recomendaciones.</p>
+    <div class="aira-meta">
+      <span id="airaTimestamp">Última recomendación: --</span>
+      <span id="airaTrigger">Activación: --</span>
+      <span id="airaAnalyzedState">Estado analizado: --</span>
+      <span id="airaAnalyzedCause">Causa: --</span>
+      <span id="airaModel">Modelo: --</span>
+    </div>
+    <p id="airaRequestStatus" class="aira-request-status">AIRA lista.</p>
+  </div>
+</section>
+
+Puedes ajustar la estructura si lo consideras necesario, pero conserva IDs equivalentes.
+
+REQUISITOS DE style.css:
+
+1. Crear estilos para la sección de AIRA compatibles con el diseño actual:
+- Fondo oscuro.
+- Borde suave azul/turquesa.
+- Tarjeta elegante.
+- Avatar circular.
+- Sombra suave.
+- Diseño responsive.
+- Botón claro y visible.
+- Estado de solicitud discreto.
+
+2. El avatar debe verse bien en escritorio y celular:
+- Desktop: avatar de 80px a 100px.
+- Mobile: avatar de 64px aproximadamente.
+- Circular con border-radius: 50%.
+- Borde con color azul/turquesa.
+- Sombra tipo glow suave.
+
+3. La sección debe tener una identidad visual distinta pero integrada:
+- Usar gradientes suaves.
+- Tonos compatibles con variables existentes:
+  --bg
+  --panel
+  --card
+  --text
+  --muted
+  --border
+  --ok
+  --warn
+  --danger
+  --info
+
+4. Crear estilos para:
+- .aira-panel
+- .aira-header
+- .aira-avatar
+- .aira-content
+- .aira-meta
+- .aira-request-status
+- .btn-primary
+- .btn-primary:disabled
+
+5. Si la recomendación viene de automatic_peligro, aplicar una clase visual de alerta, por ejemplo:
+- .aira-danger
+o resaltar el borde de la sección en rojo suave.
+
+6. La sección debe mantenerse responsive:
+- En pantallas pequeñas, el avatar, textos y botón deben apilarse verticalmente.
+- No romper el layout del dashboard.
+
+REQUISITOS DE app.js:
+
+1. Agregar referencias DOM para los elementos de AIRA:
+- airaSection
+- airaRecommendation
+- airaTimestamp
+- airaTrigger
+- airaAnalyzedState
+- airaAnalyzedCause
+- airaModel
+- requestAiraBtn
+- airaRequestStatus
+
+2. Crear función fetchLatestAiraRecommendation() que:
+- Consulte Supabase:
+  from("ai_recommendations")
+  .select("*")
+  .order("timestamp_utc", { ascending: false })
+  .limit(1)
+
+3. Si no hay recomendaciones:
+- Mostrar "AIRA aún no ha generado recomendaciones."
+- Mostrar metadatos en "--".
+- Mostrar "AIRA lista."
+
+4. Si hay recomendación:
+- Mostrar latest.recommendation.
+- Mostrar timestamp formateado con la función formatDate existente.
+- Convertir trigger_source a texto amigable:
+  - automatic_peligro → "Automática por estado Peligro"
+  - manual_dashboard → "Manual desde dashboard"
+  - otro valor → mostrarlo como texto
+- Mostrar latest.estado.
+- Mostrar latest.causa.
+- Mostrar latest.model.
+- Si trigger_source === "automatic_peligro", agregar clase visual de alerta a la sección.
+- Si no, quitar esa clase.
+
+5. Crear función requestAiraRecommendation() que:
+- Deshabilite el botón.
+- Cambie el texto del botón a "Solicitando AIRA..."
+- Cambie airaRequestStatus a "Solicitud enviada. Esperando respuesta de la Raspberry..."
+- Inserte en Supabase:
+
+supabase.from("ai_requests").insert({
+  request_type: "manual",
+  status: "pending",
+  source: "dashboard"
+})
+
+6. Si la inserción falla:
+- Mostrar error en consola.
+- Mostrar "Error solicitando recomendación de AIRA."
+- Reactivar botón.
+- Restaurar texto del botón.
+
+7. Si la inserción funciona:
+- Mantener el botón deshabilitado temporalmente, por ejemplo 10 segundos.
+- Mostrar "Solicitud pendiente. AIRA generará la recomendación cuando la Raspberry procese el siguiente dato."
+- Luego reactivar botón.
+- Llamar a fetchLatestAiraRecommendation() después de unos segundos para refrescar.
+
+8. Agregar event listener:
+requestAiraBtn.addEventListener("click", requestAiraRecommendation)
+
+9. Integrar fetchLatestAiraRecommendation() en el polling actual:
+- Debe ejecutarse al cargar la página.
+- Debe ejecutarse periódicamente junto con fetchReadings().
+- Si existen filtros activos, la lectura de AIRA debe seguir funcionando. Los filtros no deben bloquear AIRA.
+- AIRA debe seguir actualizándose aunque la tabla esté filtrada.
+
+10. No modificar la lógica existente de lectura principal, filtros, gráfica y voz salvo lo necesario para integrar AIRA.
+
+11. No exponer secret keys:
+- app.js solo debe tener SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY.
+- No agregar GEMINI_API_KEY al frontend.
+- No agregar SUPABASE_SERVICE_ROLE_KEY al frontend.
+
+12. Manejo de errores:
+- Si falla la lectura de ai_recommendations, mostrar:
+  "No se pudo leer la recomendación de AIRA."
+- Si falla la inserción en ai_requests, mostrar:
+  "No se pudo solicitar una recomendación de AIRA."
+
+13. Agregar logs útiles en consola:
+- console.log("Solicitud AIRA enviada")
+- console.error("Error leyendo AIRA", error)
+- console.error("Error solicitando AIRA", error)
+
+FLUJO FUNCIONAL ESPERADO:
+
+1. El usuario abre el dashboard.
+2. El dashboard carga lecturas desde Supabase.
+3. El dashboard consulta la última recomendación de AIRA.
+4. Si existe una recomendación, la muestra.
+5. Si el usuario presiona "Solicitar recomendación de AIRA":
+   - El frontend inserta una fila en ai_requests con status pending.
+   - La Raspberry detecta esa solicitud.
+   - La Raspberry llama Gemini.
+   - La Raspberry guarda respuesta en ai_recommendations.
+   - El dashboard lee la nueva recomendación y la muestra.
+6. Si el sistema entra en Peligro:
+   - La Raspberry genera automáticamente una recomendación de AIRA.
+   - El dashboard la muestra.
+   - Si también está implementada la voz de peligro, debe seguir funcionando.
+
+CRITERIOS DE ACEPTACIÓN:
+
+1. El dashboard sigue funcionando en localhost con:
+   python -m http.server 5500
+
+2. El dashboard sigue siendo compatible con GitHub Pages.
+
+3. El dashboard muestra la sección de AIRA con avatar.
+
+4. El avatar existe en:
+   assets/aira-avatar.png
+
+5. La imagen de AIRA debe verse como una elfa del viento femenina, elegante, ambiental y tecnológica.
+
+6. El dashboard lee correctamente la última recomendación desde ai_recommendations.
+
+7. El botón "Solicitar recomendación de AIRA" inserta una fila en ai_requests.
+
+8. El botón no permite spam de solicitudes.
+
+9. El dashboard muestra estado de solicitud.
+
+10. La recomendación se actualiza cuando la Raspberry la procesa.
+
+11. No se expone ninguna secret key.
+
+12. No se usa Gemini desde el frontend.
+
+13. No se rompe la tabla, filtros, gráfica, polling ni alertas de voz existentes.
+
+14. El código queda claro, ordenado y comentado en las partes importantes.
+
+IMPORTANTE:
+Antes de modificar, revisa el código actual de index.html, style.css y app.js para integrarte con los IDs, funciones y estilos existentes. No reemplaces todo si no es necesario. Haz cambios compatibles con el dashboard actual.
+
+Entrega:
+- index.html actualizado
+- style.css actualizado
+- app.js actualizado
+- assets/aira-avatar.png generado o preparado
