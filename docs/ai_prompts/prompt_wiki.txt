@@ -1,3 +1,9 @@
+=== HERRAMIENTA: Claude (Anthropic) ===
+=== FECHA: Mayo 2026 ===
+=== PROPÓSITO: Generación de la Wiki técnica ===
+
+
+
 Actúa como un Ingeniero de Software e IoT Senior experto en sistemas embebidos, redes industriales, modelado de negocios tecnológicos y documentación técnica. Tu objetivo es redactar el contenido completo, riguroso y detallado de la Wiki de GitHub para nuestro "Sistema IoT de monitoreo de calidad del aire" (ESP32 + Raspberry Pi + MQTT + SQLite + Ubidots + Supabase + AIRA). 
 
 La redacción debe ser extremadamente profesional, fácil de leer, con una narrativa técnica fluida e interesante. Se debe estructurar estrictamente utilizando la jerarquía de títulos Markdown (##, ###, ####) y seguir el formato de citación bibliográfica y de procedencia de datos bajo las normas IEEE.
