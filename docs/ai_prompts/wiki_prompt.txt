@@ -1,0 +1,271 @@
+Prompt utilizado en claude
+
+Estoy trabajando en un proyecto IoT de monitoreo de calidad del aire para el Challenge #3 del curso Internet de las Cosas.
+
+Contexto general del sistema ya implementado:
+
+El sistema tiene esta arquitectura funcional:
+
+ESP32 → MQTT → Raspberry Pi → SQLite local + Supabase → Dashboard web en GitHub Pages
+
+Estado actual del proyecto:
+
+1. La ESP32 ya mide y procesa datos ambientales:
+   - PM1.0
+   - PM2.5
+   - PM10
+   - NH3 estimado
+   - Temperatura
+   - Humedad
+   - Presión
+   - Estado ambiental: Normal / Precaución / Peligro
+   - Causa principal del estado
+   - Estado de silenciamiento del buzzer
+
+2. La ESP32 publica los datos mediante MQTT al tópico:
+   sabana/aire/nodo1
+
+3. La Raspberry Pi funciona como Gateway IoT:
+   - Corre Mosquitto como broker MQTT.
+   - Ejecuta un script Python llamado gateway_local.py.
+   - Recibe los datos MQTT desde la ESP32.
+   - Guarda cada lectura en SQLite local.
+   - Sube cada lectura a Supabase.
+   - El servicio corre automáticamente con systemd al prender la Raspberry.
+
+4. Supabase ya tiene una tabla llamada readings con esta estructura aproximada:
+   - id
+   - timestamp_utc
+   - pm1
+   - pm25
+   - pm10
+   - nh3
+   - temperature
+   - humidity
+   - pressure
+   - estado
+   - causa
+   - muted
+   - raw_json
+   - created_at
+
+5. Ya existe un dashboard web funcional en localhost que lee Supabase usando JavaScript desde el navegador.
+   El dashboard está hecho con:
+   - index.html
+   - style.css
+   - app.js
+   - Supabase JS Client
+   - Chart.js
+
+6. El dashboard actual:
+   - Lee la tabla readings desde Supabase.
+   - Muestra tarjetas con los últimos valores.
+   - Muestra el estado ambiental.
+   - Muestra causa principal.
+   - Muestra una gráfica histórica de PM2.5 y PM10.
+   - Muestra una tabla con las últimas lecturas.
+   - Actualiza los datos mediante polling cada 3 segundos.
+   - Está pensado para publicarse en GitHub Pages.
+
+Estructura actual del repositorio:
+
+challenge_tercer_corte/
+│
+├── README.md
+├── index.html
+├── style.css
+├── app.js
+│
+├── esp/
+│   └── prueba.ino
+│
+└── raspberry/
+    ├── gateway_local.py
+    ├── iot-gateway.service
+    └── .env.example
+
+Importante:
+- NO incluir ninguna secret key en el frontend.
+- El frontend solo debe usar la publishable key de Supabase.
+- La secret key solo vive en la Raspberry dentro del archivo .env.
+- El dashboard debe seguir siendo compatible con GitHub Pages, por tanto debe ser HTML, CSS y JavaScript estático.
+- No usar backend propio para el dashboard.
+- No romper la funcionalidad actual que ya consulta Supabase y actualiza datos cada 3 segundos.
+
+Quiero que mejores el dashboard actual implementando dos funcionalidades principales:
+
+OBJETIVO 1: Filtros avanzados para la tabla de datos
+
+Actualmente la tabla muestra las últimas lecturas. Quiero agregar una sección de filtros para que el usuario pueda analizar mejor la información histórica.
+
+Implementa filtros por:
+
+1. Fecha específica:
+   - Un input tipo date.
+   - Debe filtrar registros del día seleccionado.
+   - Debe comparar contra timestamp_utc.
+
+2. Rango de fechas:
+   - Fecha inicial.
+   - Fecha final.
+   - Debe traer registros entre ambas fechas.
+
+3. Rango de horas:
+   - Hora inicial.
+   - Hora final.
+   - Debe permitir filtrar registros dentro de un intervalo horario.
+   - Ejemplo: de 08:00 a 12:00.
+
+4. Estado ambiental:
+   - Select con opciones:
+     - Todos
+     - Normal
+     - Precaución
+     - Peligro
+
+5. Tipo de variable o dato:
+   - Select con opciones:
+     - Todos
+     - PM1.0
+     - PM2.5
+     - PM10
+     - NH3
+     - Temperatura
+     - Humedad
+     - Presión
+   - Este filtro no debe ocultar filas necesariamente, sino permitir resaltar o priorizar la variable seleccionada en la tabla y/o gráfica.
+   - Si se selecciona una variable específica, la gráfica debe mostrar esa variable principal.
+   - Si se selecciona "Todos", la gráfica puede mostrar PM2.5 y PM10 como actualmente.
+
+6. Botón "Aplicar filtros":
+   - Debe ejecutar la consulta a Supabase usando los filtros seleccionados.
+
+7. Botón "Limpiar filtros":
+   - Debe restaurar la vista normal de últimos registros.
+   - Debe volver al polling automático cada 3 segundos.
+
+8. Mientras hay filtros activos:
+   - El polling automático puede pausarse para no sobrescribir los resultados filtrados.
+   - Debe mostrarse un indicador visual tipo "Filtros activos".
+   - El usuario debe poder limpiar filtros para volver al modo en vivo.
+
+9. La tabla debe seguir mostrando columnas:
+   - Hora / fecha
+   - PM1
+   - PM2.5
+   - PM10
+   - NH3
+   - Temperatura
+   - Humedad
+   - Presión
+   - Estado
+   - Causa
+
+10. Agrega una indicación de cuántos registros se están mostrando:
+   - Ejemplo: "Mostrando 40 registros"
+   - O "Mostrando 18 registros filtrados"
+
+11. La consulta a Supabase debe estar optimizada:
+   - Usar select("*")
+   - Usar order("timestamp_utc", { ascending: false })
+   - Usar limit razonable, por ejemplo 100 o 200 registros para filtros.
+   - Aplicar gte/lte cuando haya rango de fechas.
+   - Aplicar eq cuando haya estado específico.
+
+OBJETIVO 2: Alerta por voz cuando el estado sea Peligro
+
+Quiero que el dashboard emita una alerta audible por voz cuando llegue un dato con estado "Peligro".
+
+Implementa esto con la Web Speech API del navegador, usando speechSynthesis.
+
+Requisitos:
+
+1. Cuando el último registro recibido tenga estado "Peligro", el navegador debe decir por voz algo como:
+   "Alerta de peligro. Se detectaron niveles críticos de calidad del aire. Revise el dashboard y active el protocolo de respuesta."
+
+2. La voz no debe repetirse cada 3 segundos si el sistema sigue en peligro.
+   Debe evitar spam de voz.
+   Implementa una bandera como lastSpokenDangerId o dangerAlertAlreadySpoken.
+
+3. La alerta debe activarse solamente cuando:
+   - Entra un nuevo registro con estado "Peligro", o
+   - El estado cambia de Normal/Precaución a Peligro.
+
+4. Si el estado vuelve a Normal o Precaución, debe resetearse la bandera para que una futura condición de Peligro vuelva a generar voz.
+
+5. Agrega un control visual en el dashboard:
+   - Botón para activar/desactivar alertas de voz.
+   - Texto de estado: "Alertas de voz activadas" o "Alertas de voz desactivadas".
+
+6. Por restricciones de navegadores, la voz puede requerir interacción previa del usuario.
+   Para manejar esto:
+   - Agrega un botón "Activar alertas de voz".
+   - Al hacer clic, se habilita la variable voiceAlertsEnabled = true.
+   - Opcionalmente, hacer una prueba de voz corta:
+     "Alertas de voz activadas."
+
+7. La alerta por voz debe funcionar en el frontend sin backend.
+
+8. Si speechSynthesis no está disponible, mostrar un mensaje discreto:
+   "El navegador no soporta alertas de voz."
+
+9. Además de voz, cuando estado sea Peligro:
+   - La tarjeta de estado ambiental debe cambiar visualmente a un estilo crítico.
+   - Puede agregarse una clase CSS especial.
+   - Puede mostrar texto tipo "ALERTA CRÍTICA".
+
+OBJETIVO DE DISEÑO
+
+Mantén un diseño profesional, limpio y consistente con el dashboard actual:
+- Fondo oscuro.
+- Tarjetas claras.
+- Estados con colores:
+  - Normal: verde
+  - Precaución: amarillo/naranja
+  - Peligro: rojo
+- Responsive para celular y computador.
+- No romper la estructura actual.
+- Código claro, organizado y comentado en partes clave.
+
+ARCHIVOS A MODIFICAR
+
+Modifica principalmente:
+- index.html
+- style.css
+- app.js
+
+No modificar:
+- prueba.ino, salvo que sea absolutamente necesario.
+- gateway_local.py, salvo que detectes una razón clara.
+- No agregar backend.
+
+ENTREGABLE ESPERADO
+
+Devuélveme los cambios completos y funcionales para:
+
+1. index.html
+2. style.css
+3. app.js
+
+Los archivos deben quedar listos para:
+- Probar localmente con python -m http.server 5500
+- Publicar en GitHub Pages
+- Leer datos desde Supabase
+- Actualizar datos en vivo por polling cada 3 segundos
+- Filtrar datos históricos
+- Emitir alerta por voz cuando el estado sea Peligro
+
+Criterios de aceptación:
+
+1. El dashboard sigue cargando datos desde Supabase.
+2. Las tarjetas principales muestran el último dato.
+3. La gráfica sigue funcionando.
+4. La tabla muestra registros recientes.
+5. Los filtros por fecha, rango, hora, estado y variable funcionan.
+6. El botón limpiar filtros restaura modo en vivo.
+7. El polling se mantiene en modo vivo y se pausa o controla cuando hay filtros activos.
+8. La voz se puede activar con un botón.
+9. Cuando llega un estado "Peligro", el dashboard emite una alerta por voz.
+10. La alerta de voz no se repite infinitamente cada 3 segundos.
+11. El código no expone ninguna secret key.
+12. El proyecto sigue siendo compatible con GitHub Pages.
